@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Agenda des Bénévoles</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#2563eb">
+</head>
+<body>
+    <div id="app">
+        <!-- HEADER -->
+        <header>
+            <h1>Agenda Studios</h1>
+            <button id="logout-btn" class="hidden">Déconnexion</button>
+        </header>
+
+        <main>
+            <!-- SECTION CONNEXION -->
+            <section id="login-section" class="active">
+                <div class="card">
+                    <h2>Bienvenue</h2>
+                    <p class="subtitle">Identifiez-vous pour gérer vos créneaux</p>
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="userName">Votre Nom (ex: Lerusse)</label>
+                            <input type="text" id="userName" required placeholder="Entrez votre nom">
+                        </div>
+                        <div class="form-group">
+                            <label for="userEmail">Votre Email</label>
+                            <input type="email" id="userEmail" required placeholder="Pour les confirmations">
+                        </div>
+                        <button type="submit" class="btn-primary">Accéder à mon espace</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- SECTION DASHBOARD (Mes Réservations) -->
+            <section id="dashboard-section" class="hidden">
+                <div class="dashboard-header">
+                    <h2 id="welcome-message">Bonjour</h2>
+                    <button id="new-booking-btn" class="btn-secondary">+ Nouveau Créneau</button>
+                </div>
+                
+                <h3>Mes Réservations Futures</h3>
+                <div id="my-slots-container">
+                    <!-- Cards will be injected here -->
+                    <div class="empty-state">Chargement...</div>
+                </div>
+            </section>
+
+            <!-- SECTION RÉSERVATION -->
+            <section id="booking-section" class="hidden">
+                <div class="dashboard-header">
+                    <h2>Réserver un Studio</h2>
+                    <button id="back-to-dash-btn" class="btn-text">← Retour</button>
+                </div>
+                
+                <p class="subtitle">Sélectionnez un créneau disponible. Votre demande sera soumise à approbation.</p>
+                <div id="available-slots-container">
+                    <!-- Cards will be injected here -->
+                    <div class="empty-state">Chargement...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- LOADER OVERLAY -->
+    <div id="loader" class="hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="hidden">Message</div>
+
+    <script src="app.js"></script>
+</body>
+</html>
