@@ -1,6 +1,6 @@
 // ====== CONFIGURATION ======
 // /!\ REMPLACEZ CETTE URL PAR CELLE FOURNIE PAR GOOGLE APPS SCRIPT LORS DU DÉPLOIEMENT /!\
-const API_URL = https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbyouLRyvycutzzdjNtUuIlmOwZ3bqoNsQBlTiqn-FmKyPEa--vOlPecGIAdj-W1rRem/exec;
+const API_URL = https://script.google.com/macros/s/https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbyouLRyvycutzzdjNtUuIlmOwZ3bqoNsQBlTiqn-FmKyPEa--vOlPecGIAdj-W1rRem/exec;
 // ====== STATE ======
 let state = {
     user: { name: '', email: '' },
