@@ -1,6 +1,6 @@
 // ====== CONFIGURATION ======
 // /!\ REMPLACEZ CETTE URL PAR CELLE FOURNIE PAR GOOGLE APPS SCRIPT LORS DU DÉPLOIEMENT /!\
-const API_URL = "https://script.google.com/macros/s/1V__oIykN4ExZOPPjd84yv62Qn5I5Sd41Obv6_REHAU8/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyVke7L-k43hs09d8XTiuF_OVL-roPW4zDLLhZRtYbn9IZkQuIx2C2BLYdbr2VuTl0/exec";
 
 // ====== STATE ======
 let state = {
