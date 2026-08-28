@@ -1,389 +1,405 @@
-// ====== CONFIGURATION ======
-// /!\ REMPLACEZ CETTE URL PAR CELLE FOURNIE PAR GOOGLE APPS SCRIPT LORS DU DÉPLOIEMENT /!\
-const API_URL = "https://script.google.com/macros/s/AKfycbyVke7L-k43hs09d8XTiuF_OVL-roPW4zDLLhZRtYbn9IZkQuIx2C2BLYdbr2VuTl0/exec";
-
-const MONTHS_FR = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
-];
-
-// ====== STATE ======
-let state = {
-    user: { name: '', email: '' },
-    currentWeek: '',     // Semaine réelle d'aujourd'hui (ex: "2026-W35")
-    selectedWeek: '',    // Semaine affichée dans l'agenda
-    mySlots: [],
-    availableSlots: []
-};
-
-// ====== DOM ELEMENTS ======
-const sections = {
-    login: document.getElementById('login-section'),
-    dashboard: document.getElementById('dashboard-section'),
-    booking: document.getElementById('booking-section')
-};
-
-const forms = { login: document.getElementById('login-form') };
-const btns = {
-    logout: document.getElementById('logout-btn'),
-    newBooking: document.getElementById('new-booking-btn'),
-    backToDash: document.getElementById('back-to-dash-btn'),
-    prevWeek: document.getElementById('prev-week-btn'),
-    nextWeek: document.getElementById('next-week-btn'),
-    todayBtn: document.getElementById('today-btn')
-};
-
-const weekNav = {
-    container: document.getElementById('week-nav'),
-    trigger: document.getElementById('week-picker-trigger'),
-    input: document.getElementById('week-input'),
-    label: document.getElementById('week-label'),
-    dates: document.getElementById('week-dates'),
-    badge: document.getElementById('week-badge')
-};
-
-const containers = {
-    mySlots: document.getElementById('my-slots-container'),
-    availableSlots: document.getElementById('available-slots-container')
-};
-
-const ui = {
-    welcome: document.getElementById('welcome-message'),
-    loader: document.getElementById('loader'),
-    toast: document.getElementById('toast')
-};
-
-// ====== INITIALIZATION ======
-function init() {
-    // Déterminer la semaine actuelle
-    state.currentWeek = getCurrentISOWeek();
-    state.selectedWeek = state.currentWeek;
-
-    // Check if user is already logged in (localStorage)
-    const savedUser = localStorage.getItem('agendaUser');
-    if (savedUser) {
-        state.user = JSON.parse(savedUser);
-        showSection('dashboard');
-        renderWeekNavigator();
-        fetchData();
-    }
-
-    // Event Listeners
-    forms.login.addEventListener('submit', handleLogin);
-    btns.logout.addEventListener('click', handleLogout);
-    btns.newBooking.addEventListener('click', () => showSection('booking'));
-    btns.backToDash.addEventListener('click', () => showSection('dashboard'));
-
-    // Navigation semaines
-    btns.prevWeek.addEventListener('click', () => shiftWeek(-1));
-    btns.nextWeek.addEventListener('click', () => shiftWeek(1));
-    btns.todayBtn.addEventListener('click', () => setWeek(state.currentWeek));
-
-    // Sélecteur de date / week natif
-    weekNav.trigger.addEventListener('click', () => {
-        if (typeof weekNav.input.showPicker === 'function') {
-            weekNav.input.showPicker();
-        } else {
-            weekNav.input.focus();
-            weekNav.input.click();
-        }
-    });
-
-    weekNav.input.addEventListener('change', (e) => {
-        if (e.target.value) {
-            setWeek(e.target.value);
-        }
-    });
+:root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --primary-light: #eff6ff;
+    --danger: #dc2626;
+    --danger-hover: #b91c1c;
+    --bg-color: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    --border: #e2e8f0;
+    --success: #16a34a;
+    --success-light: #f0fdf4;
 }
 
-// ====== GESTION DES DATES & SEMAINES ======
-
-function getCurrentISOWeek() {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    const yyyy = monday.getFullYear();
-    const wk = getISOWeekNumber(monday);
-    return `${yyyy}-W${String(wk).padStart(2, '0')}`;
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-function getISOWeekNumber(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    -webkit-font-smoothing: antialiased;
 }
 
-function getMondayFromISOWeek(weekStr) {
-    const parts = weekStr.split('-W');
-    const year = parseInt(parts[0], 10);
-    const week = parseInt(parts[1], 10);
-    const jan4 = new Date(year, 0, 4);
-    const dayOfW = jan4.getDay() || 7;
-    const monW1 = new Date(jan4);
-    monW1.setDate(jan4.getDate() - (dayOfW - 1));
-    const result = new Date(monW1);
-    result.setDate(monW1.getDate() + (week - 1) * 7);
-    return result;
+#app {
+    max-width: 620px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-function shiftWeek(offset) {
-    const monday = getMondayFromISOWeek(state.selectedWeek);
-    monday.setDate(monday.getDate() + (offset * 7));
-    const yyyy = monday.getFullYear();
-    const wk = getISOWeekNumber(monday);
-    const newWeekStr = `${yyyy}-W${String(wk).padStart(2, '0')}`;
-    setWeek(newWeekStr);
+header {
+    background: linear-gradient(135deg, #1e40af, #2563eb);
+    color: white;
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
 }
 
-function setWeek(weekStr) {
-    if (state.selectedWeek === weekStr) return;
-    state.selectedWeek = weekStr;
-    renderWeekNavigator();
-    fetchData();
+header h1 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
 }
 
-function renderWeekNavigator() {
-    const parts = state.selectedWeek.split('-W');
-    const weekNumber = parseInt(parts[1], 10);
-    const monday = getMondayFromISOWeek(state.selectedWeek);
-    
-    const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4);
-
-    weekNav.label.textContent = `Semaine ${weekNumber} (${parts[0]})`;
-    
-    // Format "24 août - 28 août 2026"
-    const sameMonth = monday.getMonth() === friday.getMonth();
-    let datesStr = '';
-    if (sameMonth) {
-        datesStr = `${monday.getDate()} au ${friday.getDate()} ${MONTHS_FR[friday.getMonth()]} ${friday.getFullYear()}`;
-    } else {
-        datesStr = `${monday.getDate()} ${MONTHS_FR[monday.getMonth()]} au ${friday.getDate()} ${MONTHS_FR[friday.getMonth()]} ${friday.getFullYear()}`;
-    }
-    weekNav.dates.textContent = datesStr;
-    weekNav.input.value = state.selectedWeek;
-
-    // Badge d'indication temporelle
-    if (state.selectedWeek === state.currentWeek) {
-        weekNav.badge.textContent = "Semaine en cours";
-        weekNav.badge.className = "week-badge current";
-        btns.todayBtn.classList.add('hidden');
-    } else if (state.selectedWeek > state.currentWeek) {
-        weekNav.badge.textContent = "Semaine future";
-        weekNav.badge.className = "week-badge";
-        btns.todayBtn.classList.remove('hidden');
-    } else {
-        weekNav.badge.textContent = "Semaine passée";
-        weekNav.badge.className = "week-badge";
-        btns.todayBtn.classList.remove('hidden');
-    }
+/* SÉLECTEUR DE SEMAINE */
+.week-navigator {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
 }
 
-// ====== ACTIONS ======
-function handleLogin(e) {
-    e.preventDefault();
-    const name = document.getElementById('userName').value.trim();
-    const email = document.getElementById('userEmail').value.trim();
-    
-    if (name && email) {
-        state.user = { name, email };
-        localStorage.setItem('agendaUser', JSON.stringify(state.user));
-        showSection('dashboard');
-        renderWeekNavigator();
-        fetchData();
-    }
+.week-nav-arrow {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid var(--border);
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
 }
 
-function handleLogout() {
-    localStorage.removeItem('agendaUser');
-    state.user = { name: '', email: '' };
-    showSection('login');
+.week-nav-arrow:hover {
+    background: #e2e8f0;
+    color: var(--primary);
+    transform: scale(1.04);
 }
 
-async function fetchData() {
-    if(API_URL === "METTEZ_VOTRE_URL_GOOGLE_APPS_SCRIPT_ICI") {
-        showToast("Erreur: L'URL de l'API n'est pas configurée dans app.js");
-        return;
-    }
-    
-    showLoader();
-    try {
-        const url = `${API_URL}?action=getData&name=${encodeURIComponent(state.user.name)}&week=${encodeURIComponent(state.selectedWeek)}`;
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        if (data.success) {
-            state.mySlots = data.mySlots || [];
-            state.availableSlots = data.availableSlots || [];
-            renderDashboard();
-            renderBooking();
-        } else {
-            showToast("Erreur lors de la récupération des données : " + (data.message || ''));
-        }
-    } catch (err) {
-        console.error(err);
-        showToast("Erreur de connexion avec Google.");
-    }
-    hideLoader();
+.week-info {
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 8px;
+    position: relative;
+    transition: background-color 0.2s;
 }
 
-async function bookSlot(day, slot, studio) {
-    const monday = getMondayFromISOWeek(state.selectedWeek);
-    if (!confirm(`Demander la réservation pour ${day} (${slot}) en ${studio} ?`)) return;
-    
-    showLoader();
-    try {
-        const payload = {
-            action: 'requestBooking',
-            week: state.selectedWeek,
-            name: state.user.name,
-            email: state.user.email,
-            day: day,
-            slot: slot,
-            studio: studio
-        };
-        
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            showToast("Demande envoyée pour validation !");
-            showSection('dashboard');
-            fetchData();
-        } else {
-            showToast("Erreur: " + data.message);
-        }
-    } catch(err) {
-        showToast("Erreur lors de la demande.");
-    }
-    hideLoader();
+.week-info:hover {
+    background-color: var(--primary-light);
 }
 
-async function cancelSlot(week, day, slot, studio) {
-    const targetWeek = week || state.selectedWeek;
-    if (!confirm(`Êtes-vous sûr de vouloir annuler votre créneau du ${day} (${slot}) pour la ${targetWeek} ?`)) return;
-    
-    showLoader();
-    try {
-        const payload = {
-            action: 'cancelBooking',
-            week: targetWeek,
-            name: state.user.name,
-            day: day,
-            slot: slot,
-            studio: studio
-        };
-        
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload),
-            headers: { 'Content-Type': 'text/plain' }
-        });
-        
-        const data = await response.json();
-        if (data.success) {
-            showToast("Réservation annulée.");
-            fetchData();
-        } else {
-            showToast("Erreur: " + data.message);
-        }
-    } catch(err) {
-        showToast("Erreur lors de l'annulation.");
-    }
-    hideLoader();
+.week-badge-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
 }
 
-// ====== RENDERING ======
-function renderDashboard() {
-    ui.welcome.textContent = `Bonjour, ${state.user.name}`;
-    containers.mySlots.innerHTML = '';
-    
-    if (state.mySlots.length === 0) {
-        containers.mySlots.innerHTML = '<div class="empty-state">Vous n\'avez aucun créneau réservé sur cette semaine.</div>';
-        return;
-    }
-    
-    state.mySlots.forEach(slot => {
-        const card = document.createElement('div');
-        card.className = 'slot-card';
-        card.innerHTML = `
-            <div class="slot-header">
-                <div>
-                    <div class="slot-day">${slot.day}</div>
-                    <div class="slot-time">${slot.time}</div>
-                </div>
-                <div class="slot-studio">${slot.studio}</div>
-            </div>
-            <button class="btn-danger" onclick="cancelSlot('${slot.week || state.selectedWeek}', '${slot.day}', '${slot.time}', '${slot.studio}')">Annuler ce créneau</button>
-        `;
-        containers.mySlots.appendChild(card);
-    });
+.week-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #475569;
 }
 
-function renderBooking() {
-    containers.availableSlots.innerHTML = '';
-    
-    if (state.availableSlots.length === 0) {
-        containers.availableSlots.innerHTML = '<div class="empty-state">Aucun créneau disponible pour cette semaine.</div>';
-        return;
-    }
-    
-    state.availableSlots.forEach(slot => {
-        const card = document.createElement('div');
-        card.className = 'slot-card';
-        
-        const selectId = `select-${slot.day.replace(/[^a-zA-Z0-9]/g, '')}-${slot.time.replace(/[^a-zA-Z0-9]/g, '')}`;
-        const studioOptions = slot.studios.map(s => `<option value="${s}">${s}</option>`).join('');
-        
-        card.innerHTML = `
-            <div class="slot-header">
-                <div>
-                    <div class="slot-day">${slot.day}</div>
-                    <div class="slot-time">${slot.time}</div>
-                </div>
-            </div>
-            <div class="form-group" style="margin-bottom:0.25rem;">
-                <label style="font-size:0.75rem; color:var(--text-muted); margin-bottom:0.25rem;">Studio disponible :</label>
-                <select id="${selectId}">
-                    ${studioOptions}
-                </select>
-            </div>
-            <button class="btn-primary" style="margin-top:0.25rem;" 
-                onclick="bookSlot('${slot.day}', '${slot.time}', document.getElementById('${selectId}').value)">
-                Demander ce créneau
-            </button>
-        `;
-        containers.availableSlots.appendChild(card);
-    });
+.week-badge.current {
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
-// ====== UTILS ======
-function showSection(sectionName) {
-    Object.values(sections).forEach(s => s.classList.remove('active'));
-    sections[sectionName].classList.add('active');
-    
-    if (sectionName === 'login') {
-        btns.logout.classList.add('hidden');
-        weekNav.container.classList.add('hidden');
-    } else {
-        btns.logout.classList.remove('hidden');
-        weekNav.container.classList.remove('hidden');
-    }
+.today-quick-btn {
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--primary);
+    color: white;
+    border-radius: 10px;
+    padding: 2px 8px;
+    border: none;
+    cursor: pointer;
 }
 
-function showLoader() { ui.loader.classList.remove('hidden'); }
-function hideLoader() { ui.loader.classList.add('hidden'); }
-
-function showToast(message) {
-    ui.toast.textContent = message;
-    ui.toast.classList.remove('hidden');
-    setTimeout(() => ui.toast.classList.add('hidden'), 3500);
+.today-quick-btn:hover {
+    background: var(--primary-hover);
 }
 
-// Démarrage de l'application
-init();
+.week-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.week-dates {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+.hidden-week-input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+}
+
+main {
+    padding: 1.25rem 1rem;
+    flex: 1;
+}
+
+section {
+    display: none;
+    animation: fadeIn 0.25s ease;
+}
+
+section.active {
+    display: block;
+}
+
+.card {
+    background: var(--card-bg);
+    border-radius: 14px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border: 1px solid var(--border);
+    margin-bottom: 1rem;
+}
+
+.card h2 { 
+    font-size: 1.3rem; 
+    font-weight: 700; 
+    margin-bottom: 0.35rem; 
+}
+
+.subtitle { 
+    color: var(--text-muted); 
+    font-size: 0.875rem; 
+    margin-bottom: 1.25rem; 
+}
+
+.section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 1.25rem 0 0.75rem 0;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.4rem;
+}
+
+input, select {
+    width: 100%;
+    padding: 0.75rem 0.9rem;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    color: var(--text-main);
+    background-color: white;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    width: 100%;
+    background-color: var(--primary);
+    color: white;
+    padding: 0.8rem;
+    border-radius: 8px;
+}
+.btn-primary:hover { 
+    background-color: var(--primary-hover); 
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.25);
+}
+
+.btn-secondary {
+    background-color: var(--primary-light);
+    color: var(--primary);
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid #bfdbfe;
+}
+.btn-secondary:hover {
+    background-color: #dbeafe;
+}
+
+.btn-danger {
+    background-color: #fee2e2;
+    color: var(--danger);
+    padding: 0.5rem 0.9rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid #fecaca;
+}
+.btn-danger:hover { 
+    background-color: var(--danger); 
+    color: white; 
+}
+
+.btn-text {
+    background: none;
+    color: var(--primary);
+    padding: 0.5rem;
+    font-weight: 600;
+}
+
+#logout-btn {
+    background: rgba(255,255,255,0.18);
+    color: white;
+    padding: 0.4rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    backdrop-filter: blur(4px);
+}
+#logout-btn:hover {
+    background: rgba(255,255,255,0.28);
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.slot-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.1rem;
+    margin-bottom: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot-card:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.slot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+.slot-day { 
+    font-weight: 700; 
+    color: var(--primary); 
+    font-size: 1rem;
+}
+.slot-time { 
+    font-size: 0.85rem; 
+    color: var(--text-muted); 
+    margin-top: 2px;
+}
+.slot-studio { 
+    font-size: 0.8rem; 
+    font-weight: 600; 
+    background: #f1f5f9; 
+    color: #334155; 
+    padding: 4px 8px; 
+    border-radius: 6px;
+    border: 1px solid var(--border);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--text-muted);
+    background: white;
+    border-radius: 12px;
+    border: 1px dashed var(--border);
+    font-size: 0.95rem;
+}
+
+/* Loader */
+#loader {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(255,255,255,0.85);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(2px);
+}
+#loader.hidden { display: none; }
+
+.spinner {
+    width: 42px; height: 42px;
+    border: 3.5px solid #e2e8f0;
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+/* Toast */
+#toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a; 
+    color: white;
+    padding: 0.8rem 1.6rem;
+    border-radius: 30px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    z-index: 1001;
+    transition: all 0.25s ease;
+}
+#toast.hidden { opacity: 0; pointer-events: none; transform: translate(-50%, 12px); }
+
+.hidden { display: none !important; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
