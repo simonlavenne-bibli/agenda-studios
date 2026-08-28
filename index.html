@@ -6,7 +6,7 @@
     <title>Agenda des Bénévoles</title>
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <meta name="theme-color" content="#2563eb">
 </head>
 <body>
@@ -16,6 +16,21 @@
             <h1>Agenda Studios</h1>
             <button id="logout-btn" class="hidden">Déconnexion</button>
         </header>
+
+        <!-- SÉLECTEUR DE SEMAINE -->
+        <nav id="week-nav" class="week-navigator hidden">
+            <button id="prev-week-btn" class="week-nav-arrow" title="Semaine précédente">◀</button>
+            <div class="week-info" id="week-picker-trigger">
+                <div class="week-badge-row">
+                    <span id="week-badge" class="week-badge">Semaine en cours</span>
+                    <button id="today-btn" class="today-quick-btn hidden">Cette semaine</button>
+                </div>
+                <div id="week-label" class="week-title">Semaine 35</div>
+                <div id="week-dates" class="week-dates">24 août - 28 août 2026</div>
+                <input type="week" id="week-input" class="hidden-week-input" aria-label="Choisir une semaine">
+            </div>
+            <button id="next-week-btn" class="week-nav-arrow" title="Semaine suivante">▶</button>
+        </nav>
 
         <main>
             <!-- SECTION CONNEXION -->
@@ -40,13 +55,15 @@
             <!-- SECTION DASHBOARD (Mes Réservations) -->
             <section id="dashboard-section" class="hidden">
                 <div class="dashboard-header">
-                    <h2 id="welcome-message">Bonjour</h2>
-                    <button id="new-booking-btn" class="btn-secondary">+ Nouveau Créneau</button>
+                    <div>
+                        <h2 id="welcome-message">Bonjour</h2>
+                        <p class="subtitle" style="margin-bottom:0;">Planning de vos enregistrements</p>
+                    </div>
+                    <button id="new-booking-btn" class="btn-secondary">+ Réserver</button>
                 </div>
                 
-                <h3>Mes Réservations Futures</h3>
+                <h3 class="section-title">Mes Réservations sur cette semaine</h3>
                 <div id="my-slots-container">
-                    <!-- Cards will be injected here -->
                     <div class="empty-state">Chargement...</div>
                 </div>
             </section>
@@ -54,13 +71,14 @@
             <!-- SECTION RÉSERVATION -->
             <section id="booking-section" class="hidden">
                 <div class="dashboard-header">
-                    <h2>Réserver un Studio</h2>
-                    <button id="back-to-dash-btn" class="btn-text">← Retour</button>
+                    <div>
+                        <h2>Réserver un Studio</h2>
+                        <p class="subtitle" style="margin-bottom:0;">Sélectionnez un créneau disponible</p>
+                    </div>
+                    <button id="back-to-dash-btn" class="btn-text">← Mes réservations</button>
                 </div>
                 
-                <p class="subtitle">Sélectionnez un créneau disponible. Votre demande sera soumise à approbation.</p>
                 <div id="available-slots-container">
-                    <!-- Cards will be injected here -->
                     <div class="empty-state">Chargement...</div>
                 </div>
             </section>
