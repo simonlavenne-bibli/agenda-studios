@@ -55,8 +55,8 @@ const ui = {
 
 // ====== INITIALIZATION ======
 function init() {
-    // Déterminer la semaine actuelle
-    state.currentWeek = getCurrentISOWeek();
+    // Calculer la semaine ISO actuelle de manière exacte
+    state.currentWeek = getISOWeekString(new Date());
     state.selectedWeek = state.currentWeek;
 
     // Check if user is already logged in (localStorage)
@@ -79,7 +79,7 @@ function init() {
     btns.nextWeek.addEventListener('click', () => shiftWeek(1));
     btns.todayBtn.addEventListener('click', () => setWeek(state.currentWeek));
 
-    // Sélecteur de date / week natif
+    // Sélecteur de date natif
     weekNav.trigger.addEventListener('click', () => {
         if (typeof weekNav.input.showPicker === 'function') {
             weekNav.input.showPicker();
@@ -96,43 +96,45 @@ function init() {
     });
 }
 
-// ====== GESTION DES DATES & SEMAINES ======
+// ====== GESTION DES DATES & SEMAINES (ISO-8601 ROBUSTE) ======
 
-function getCurrentISOWeek() {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-    const yyyy = monday.getFullYear();
-    const wk = getISOWeekNumber(monday);
-    return `${yyyy}-W${String(wk).padStart(2, '0')}`;
+/**
+ * Retourne la chaîne ISO de semaine ("YYYY-Www") pour une date donnée
+ */
+function getISOWeekString(d) {
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayNr = (target.getDay() + 6) % 7; // 0 = Lundi, 6 = Dimanche
+    target.setDate(target.getDate() - dayNr + 3); // Jeudi de la semaine
+    const firstThursday = target.valueOf();
+    target.setMonth(0, 1);
+    if (target.getDay() !== 4) {
+        target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+    }
+    const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+    const year = new Date(firstThursday).getFullYear();
+    return `${year}-W${String(weekNum).padStart(2, '0')}`;
 }
 
-function getISOWeekNumber(date) {
-    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
-
-function getMondayFromISOWeek(weekStr) {
-    const parts = weekStr.split('-W');
-    const year = parseInt(parts[0], 10);
-    const week = parseInt(parts[1], 10);
+/**
+ * Retourne l'objet Date du Lundi correspondant à une semaine ISO ("YYYY-Www")
+ */
+function getMondayFromWeekString(weekStr) {
+    const [yearStr, weekNumStr] = weekStr.split('-W');
+    const year = parseInt(yearStr, 10);
+    const week = parseInt(weekNumStr, 10);
+    
+    // Le 4 janvier est TOUJOURS dans la semaine 1
     const jan4 = new Date(year, 0, 4);
-    const dayOfW = jan4.getDay() || 7;
-    const monW1 = new Date(jan4);
-    monW1.setDate(jan4.getDate() - (dayOfW - 1));
-    const result = new Date(monW1);
-    result.setDate(monW1.getDate() + (week - 1) * 7);
+    const day = (jan4.getDay() + 6) % 7; // 0 = Lundi, 6 = Dimanche
+    const monW1 = new Date(year, 0, 4 - day);
+    const result = new Date(monW1.getFullYear(), monW1.getMonth(), monW1.getDate() + (week - 1) * 7);
     return result;
 }
 
 function shiftWeek(offset) {
-    const monday = getMondayFromISOWeek(state.selectedWeek);
+    const monday = getMondayFromWeekString(state.selectedWeek);
     monday.setDate(monday.getDate() + (offset * 7));
-    const yyyy = monday.getFullYear();
-    const wk = getISOWeekNumber(monday);
-    const newWeekStr = `${yyyy}-W${String(wk).padStart(2, '0')}`;
+    const newWeekStr = getISOWeekString(monday);
     setWeek(newWeekStr);
 }
 
@@ -146,14 +148,13 @@ function setWeek(weekStr) {
 function renderWeekNavigator() {
     const parts = state.selectedWeek.split('-W');
     const weekNumber = parseInt(parts[1], 10);
-    const monday = getMondayFromISOWeek(state.selectedWeek);
+    const monday = getMondayFromWeekString(state.selectedWeek);
     
-    const friday = new Date(monday);
-    friday.setDate(monday.getDate() + 4);
+    const friday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 4);
 
     weekNav.label.textContent = `Semaine ${weekNumber} (${parts[0]})`;
     
-    // Format "24 août - 28 août 2026"
+    // Format "24 au 28 août 2026"
     const sameMonth = monday.getMonth() === friday.getMonth();
     let datesStr = '';
     if (sameMonth) {
@@ -229,7 +230,6 @@ async function fetchData() {
 }
 
 async function bookSlot(day, slot, studio) {
-    const monday = getMondayFromISOWeek(state.selectedWeek);
     if (!confirm(`Demander la réservation pour ${day} (${slot}) en ${studio} ?`)) return;
     
     showLoader();
