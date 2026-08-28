@@ -66,6 +66,8 @@ function init() {
         showSection('dashboard');
         renderWeekNavigator();
         fetchData();
+    } else {
+        showSection('login');
     }
 
     // Event Listeners
@@ -364,8 +366,17 @@ function renderBooking() {
 
 // ====== UTILS ======
 function showSection(sectionName) {
-    Object.values(sections).forEach(s => s.classList.remove('active'));
-    sections[sectionName].classList.add('active');
+    Object.values(sections).forEach(s => {
+        if (s) {
+            s.classList.remove('active');
+            s.classList.add('hidden');
+        }
+    });
+    
+    if (sections[sectionName]) {
+        sections[sectionName].classList.add('active');
+        sections[sectionName].classList.remove('hidden');
+    }
     
     if (sectionName === 'login') {
         btns.logout.classList.add('hidden');
