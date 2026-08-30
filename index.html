@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Agenda des Bénévoles</title>
-    <link rel="stylesheet" href="./style.css?v=2">
+    <link rel="stylesheet" href="./style.css?v=3">
     <link rel="manifest" href="manifest.json">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <meta name="theme-color" content="#2563eb">
@@ -33,22 +33,43 @@
         </nav>
 
         <main>
-            <!-- SECTION CONNEXION -->
+            <!-- SECTION CONNEXION — ÉTAPE 1 : nom (+ email si première connexion) -->
             <section id="login-section" class="active">
                 <div class="card">
                     <h2>Bienvenue</h2>
-                    <p class="subtitle">Identifiez-vous pour gérer vos créneaux</p>
+                    <p class="subtitle">Entrez votre nom pour recevoir un code de connexion par email</p>
                     <form id="login-form">
                         <div class="form-group">
                             <label for="userName">Votre Nom (ex: Lerusse)</label>
-                            <input type="text" id="userName" required placeholder="Entrez votre nom">
+                            <input type="text" id="userName" required placeholder="Entrez votre nom" autocomplete="name">
                         </div>
-                        <div class="form-group">
-                            <label for="userEmail">Votre Email</label>
-                            <input type="email" id="userEmail" required placeholder="Pour les confirmations">
+                        <div class="form-group hidden" id="email-field-group">
+                            <label for="userEmail">Votre Email (première connexion)</label>
+                            <input type="email" id="userEmail" placeholder="Pour recevoir votre code" autocomplete="email">
                         </div>
-                        <button type="submit" class="btn-primary">Accéder à mon espace</button>
+                        <button type="submit" class="btn-primary">Recevoir mon code</button>
                     </form>
+                </div>
+            </section>
+
+            <!-- SECTION CONNEXION — ÉTAPE 2 : saisie du code reçu -->
+            <section id="verify-section" class="hidden">
+                <div class="card">
+                    <h2>Vérification</h2>
+                    <p class="subtitle">
+                        Un code à 6 chiffres a été envoyé par email à l'adresse associée à
+                        <strong id="verify-target-name"></strong>.
+                    </p>
+                    <form id="verify-form">
+                        <div class="form-group">
+                            <label for="verifyCodeInput">Code reçu</label>
+                            <input type="text" id="verifyCodeInput" inputmode="numeric" pattern="[0-9]*"
+                                   maxlength="6" required placeholder="123456" autocomplete="one-time-code">
+                        </div>
+                        <button type="submit" class="btn-primary">Valider</button>
+                    </form>
+                    <button type="button" id="resend-code-btn" class="btn-text" style="width:100%; margin-top:0.5rem;">Renvoyer le code</button>
+                    <button type="button" id="back-to-login-btn" class="btn-text" style="width:100%;">← Changer de nom</button>
                 </div>
             </section>
 
@@ -61,7 +82,7 @@
                     </div>
                     <button id="new-booking-btn" class="btn-secondary">+ Réserver</button>
                 </div>
-                
+
                 <h3 class="section-title">Mes Réservations sur cette semaine</h3>
                 <div id="my-slots-container">
                     <div class="empty-state">Chargement...</div>
@@ -77,7 +98,7 @@
                     </div>
                     <button id="back-to-dash-btn" class="btn-text">← Mes réservations</button>
                 </div>
-                
+
                 <div id="available-slots-container">
                     <div class="empty-state">Chargement...</div>
                 </div>
@@ -93,6 +114,6 @@
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="hidden">Message</div>
 
-    <script src="./app.js?v=3"></script>
+    <script src="./app.js?v=4"></script>
 </body>
 </html>
