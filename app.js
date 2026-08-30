@@ -1,5 +1,4 @@
 // ====== CONFIGURATION ======
-// /!\ REMPLACEZ CETTE URL PAR CELLE FOURNIE PAR GOOGLE APPS SCRIPT LORS DU DÉPLOIEMENT /!\
 const API_URL = "https://script.google.com/macros/s/AKfycbyVke7L-k43hs09d8XTiuF_OVL-roPW4zDLLhZRtYbn9IZkQuIx2C2BLYdbr2VuTl0/exec";
 
 const MONTHS_FR = [
@@ -7,30 +6,42 @@ const MONTHS_FR = [
     'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
 ];
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
 // ====== STATE ======
 let state = {
-    user: { name: '', email: '' },
-    currentWeek: '',     // Semaine réelle d'aujourd'hui (ex: "2026-W35")
-    selectedWeek: '',    // Semaine affichée dans l'agenda
+    user: { name: '' },
+    token: '',
+    pendingName: '',       // nom en attente de vérification (entre étape 1 et étape 2)
+    currentWeek: '',       // Semaine réelle d'aujourd'hui (ex: "2026-W35")
+    selectedWeek: '',      // Semaine affichée dans l'agenda
     mySlots: [],
-    availableSlots: []
+    availableSlots: [],
+    resendCooldownUntil: 0
 };
 
 // ====== DOM ELEMENTS ======
 const sections = {
     login: document.getElementById('login-section'),
+    verify: document.getElementById('verify-section'),
     dashboard: document.getElementById('dashboard-section'),
     booking: document.getElementById('booking-section')
 };
 
-const forms = { login: document.getElementById('login-form') };
+const forms = {
+    login: document.getElementById('login-form'),
+    verify: document.getElementById('verify-form')
+};
+
 const btns = {
     logout: document.getElementById('logout-btn'),
     newBooking: document.getElementById('new-booking-btn'),
     backToDash: document.getElementById('back-to-dash-btn'),
     prevWeek: document.getElementById('prev-week-btn'),
     nextWeek: document.getElementById('next-week-btn'),
-    todayBtn: document.getElementById('today-btn')
+    todayBtn: document.getElementById('today-btn'),
+    resendCode: document.getElementById('resend-code-btn'),
+    backToLogin: document.getElementById('back-to-login-btn')
 };
 
 const weekNav = {
@@ -50,7 +61,12 @@ const containers = {
 const ui = {
     welcome: document.getElementById('welcome-message'),
     loader: document.getElementById('loader'),
-    toast: document.getElementById('toast')
+    toast: document.getElementById('toast'),
+    emailFieldGroup: document.getElementById('email-field-group'),
+    userNameInput: document.getElementById('userName'),
+    userEmailInput: document.getElementById('userEmail'),
+    verifyCodeInput: document.getElementById('verifyCodeInput'),
+    verifyTargetName: document.getElementById('verify-target-name')
 };
 
 // ====== INITIALIZATION ======
@@ -59,10 +75,12 @@ function init() {
     state.currentWeek = getISOWeekString(new Date());
     state.selectedWeek = state.currentWeek;
 
-    // Check if user is already logged in (localStorage)
-    const savedUser = localStorage.getItem('agendaUser');
-    if (savedUser) {
-        state.user = JSON.parse(savedUser);
+    // Vérifier si un jeton de session valide est déjà stocké
+    const savedToken = localStorage.getItem('agendaToken');
+    const savedName = localStorage.getItem('agendaName');
+    if (savedToken && savedName) {
+        state.token = savedToken;
+        state.user = { name: savedName };
         showSection('dashboard');
         renderWeekNavigator();
         fetchData();
@@ -70,9 +88,14 @@ function init() {
         showSection('login');
     }
 
-    // Event Listeners
-    forms.login.addEventListener('submit', handleLogin);
+    // Event Listeners — authentification
+    forms.login.addEventListener('submit', handleRequestCode);
+    forms.verify.addEventListener('submit', handleVerifyCode);
+    btns.resendCode.addEventListener('click', handleResendCode);
+    btns.backToLogin.addEventListener('click', resetToLoginStep);
     btns.logout.addEventListener('click', handleLogout);
+
+    // Event Listeners — navigation
     btns.newBooking.addEventListener('click', () => showSection('booking'));
     btns.backToDash.addEventListener('click', () => showSection('dashboard'));
 
@@ -98,15 +121,148 @@ function init() {
     });
 }
 
+// ====== AUTHENTIFICATION (code à usage unique par email) ======
+
+async function handleRequestCode(e) {
+    e.preventDefault();
+    const name = ui.userNameInput.value.trim();
+    const email = ui.userEmailInput.value.trim();
+    if (!name) return;
+
+    showLoader();
+    try {
+        const payload = { action: 'requestCode', name, email };
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            state.pendingName = name;
+            ui.verifyTargetName.textContent = name;
+            ui.verifyCodeInput.value = '';
+            showSection('verify');
+            startResendCooldown();
+            showToast(data.message || "Code envoyé.");
+        } else if (data.reason === 'EMAIL_REQUIRED') {
+            ui.emailFieldGroup.classList.remove('hidden');
+            ui.userEmailInput.setAttribute('required', 'required');
+            showToast(data.message || "Première connexion : merci d'indiquer votre email.");
+        } else {
+            showToast(data.message || "Erreur lors de l'envoi du code.");
+        }
+    } catch (err) {
+        console.error(err);
+        showToast("Erreur de connexion avec Google.");
+    }
+    hideLoader();
+}
+
+async function handleVerifyCode(e) {
+    e.preventDefault();
+    const code = ui.verifyCodeInput.value.trim();
+    if (!code) return;
+
+    showLoader();
+    try {
+        const payload = { action: 'verifyCode', name: state.pendingName, code };
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            state.token = data.token;
+            state.user = { name: data.name };
+            localStorage.setItem('agendaToken', state.token);
+            localStorage.setItem('agendaName', state.user.name);
+            ui.verifyCodeInput.value = '';
+            showSection('dashboard');
+            renderWeekNavigator();
+            fetchData();
+        } else {
+            showToast(data.message || "Code invalide.");
+        }
+    } catch (err) {
+        console.error(err);
+        showToast("Erreur de connexion avec Google.");
+    }
+    hideLoader();
+}
+
+async function handleResendCode() {
+    if (Date.now() < state.resendCooldownUntil) return;
+
+    showLoader();
+    try {
+        const payload = {
+            action: 'requestCode',
+            name: state.pendingName,
+            email: ui.userEmailInput.value.trim()
+        };
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'text/plain' }
+        });
+        const data = await response.json();
+        showToast(data.message || (data.success ? "Nouveau code envoyé." : "Erreur."));
+        if (data.success) startResendCooldown();
+    } catch (err) {
+        console.error(err);
+        showToast("Erreur de connexion avec Google.");
+    }
+    hideLoader();
+}
+
+function startResendCooldown() {
+    state.resendCooldownUntil = Date.now() + RESEND_COOLDOWN_SECONDS * 1000;
+    btns.resendCode.disabled = true;
+
+    const update = () => {
+        const remaining = Math.ceil((state.resendCooldownUntil - Date.now()) / 1000);
+        if (remaining <= 0) {
+            btns.resendCode.disabled = false;
+            btns.resendCode.textContent = "Renvoyer le code";
+        } else {
+            btns.resendCode.textContent = `Renvoyer le code (${remaining}s)`;
+            setTimeout(update, 1000);
+        }
+    };
+    update();
+}
+
+function resetToLoginStep() {
+    ui.emailFieldGroup.classList.add('hidden');
+    ui.userEmailInput.removeAttribute('required');
+    ui.userEmailInput.value = '';
+    state.pendingName = '';
+    showSection('login');
+}
+
+function handleLogout() {
+    localStorage.removeItem('agendaToken');
+    localStorage.removeItem('agendaName');
+    state.token = '';
+    state.user = { name: '' };
+    resetToLoginStep();
+}
+
+function handleSessionExpired() {
+    handleLogout();
+    showToast("Votre session a expiré, veuillez vous reconnecter.");
+}
+
 // ====== GESTION DES DATES & SEMAINES (ISO-8601 ROBUSTE) ======
 
-/**
- * Retourne la chaîne ISO de semaine ("YYYY-Www") pour une date donnée
- */
 function getISOWeekString(d) {
     const target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayNr = (target.getDay() + 6) % 7; // 0 = Lundi, 6 = Dimanche
-    target.setDate(target.getDate() - dayNr + 3); // Jeudi de la semaine
+    const dayNr = (target.getDay() + 6) % 7;
+    target.setDate(target.getDate() - dayNr + 3);
     const firstThursday = target.valueOf();
     target.setMonth(0, 1);
     if (target.getDay() !== 4) {
@@ -117,27 +273,21 @@ function getISOWeekString(d) {
     return `${year}-W${String(weekNum).padStart(2, '0')}`;
 }
 
-/**
- * Retourne l'objet Date du Lundi correspondant à une semaine ISO ("YYYY-Www")
- */
 function getMondayFromWeekString(weekStr) {
     const [yearStr, weekNumStr] = weekStr.split('-W');
     const year = parseInt(yearStr, 10);
     const week = parseInt(weekNumStr, 10);
-    
-    // Le 4 janvier est TOUJOURS dans la semaine 1
+
     const jan4 = new Date(year, 0, 4);
-    const day = (jan4.getDay() + 6) % 7; // 0 = Lundi, 6 = Dimanche
+    const day = (jan4.getDay() + 6) % 7;
     const monW1 = new Date(year, 0, 4 - day);
-    const result = new Date(monW1.getFullYear(), monW1.getMonth(), monW1.getDate() + (week - 1) * 7);
-    return result;
+    return new Date(monW1.getFullYear(), monW1.getMonth(), monW1.getDate() + (week - 1) * 7);
 }
 
 function shiftWeek(offset) {
     const monday = getMondayFromWeekString(state.selectedWeek);
     monday.setDate(monday.getDate() + (offset * 7));
-    const newWeekStr = getISOWeekString(monday);
-    setWeek(newWeekStr);
+    setWeek(getISOWeekString(monday));
 }
 
 function setWeek(weekStr) {
@@ -151,12 +301,10 @@ function renderWeekNavigator() {
     const parts = state.selectedWeek.split('-W');
     const weekNumber = parseInt(parts[1], 10);
     const monday = getMondayFromWeekString(state.selectedWeek);
-    
     const friday = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 4);
 
     weekNav.label.textContent = `Semaine ${weekNumber} (${parts[0]})`;
-    
-    // Format "24 au 28 août 2026"
+
     const sameMonth = monday.getMonth() === friday.getMonth();
     let datesStr = '';
     if (sameMonth) {
@@ -167,7 +315,6 @@ function renderWeekNavigator() {
     weekNav.dates.textContent = datesStr;
     weekNav.input.value = state.selectedWeek;
 
-    // Badge d'indication temporelle
     if (state.selectedWeek === state.currentWeek) {
         weekNav.badge.textContent = "Semaine en cours";
         weekNav.badge.className = "week-badge current";
@@ -183,44 +330,22 @@ function renderWeekNavigator() {
     }
 }
 
-// ====== ACTIONS ======
-function handleLogin(e) {
-    e.preventDefault();
-    const name = document.getElementById('userName').value.trim();
-    const email = document.getElementById('userEmail').value.trim();
-    
-    if (name && email) {
-        state.user = { name, email };
-        localStorage.setItem('agendaUser', JSON.stringify(state.user));
-        showSection('dashboard');
-        renderWeekNavigator();
-        fetchData();
-    }
-}
-
-function handleLogout() {
-    localStorage.removeItem('agendaUser');
-    state.user = { name: '', email: '' };
-    showSection('login');
-}
+// ====== ACTIONS (authentifiées par jeton de session) ======
 
 async function fetchData() {
-    if(API_URL === "METTEZ_VOTRE_URL_GOOGLE_APPS_SCRIPT_ICI") {
-        showToast("Erreur: L'URL de l'API n'est pas configurée dans app.js");
-        return;
-    }
-    
     showLoader();
     try {
-        const url = `${API_URL}?action=getData&name=${encodeURIComponent(state.user.name)}&week=${encodeURIComponent(state.selectedWeek)}`;
+        const url = `${API_URL}?action=getData&token=${encodeURIComponent(state.token)}&week=${encodeURIComponent(state.selectedWeek)}`;
         const response = await fetch(url);
         const data = await response.json();
-        
+
         if (data.success) {
             state.mySlots = data.mySlots || [];
             state.availableSlots = data.availableSlots || [];
             renderDashboard();
             renderBooking();
+        } else if (data.sessionExpired) {
+            handleSessionExpired();
         } else {
             showToast("Erreur lors de la récupération des données : " + (data.message || ''));
         }
@@ -233,34 +358,36 @@ async function fetchData() {
 
 async function bookSlot(day, slot, studio) {
     if (!confirm(`Demander la réservation pour ${day} (${slot}) en ${studio} ?`)) return;
-    
+
     showLoader();
     try {
         const payload = {
             action: 'requestBooking',
+            token: state.token,
             week: state.selectedWeek,
-            name: state.user.name,
-            email: state.user.email,
             day: day,
             slot: slot,
             studio: studio
         };
-        
+
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 'Content-Type': 'text/plain' }
         });
-        
+
         const data = await response.json();
         if (data.success) {
             showToast("Demande envoyée pour validation !");
             showSection('dashboard');
             fetchData();
+        } else if (data.sessionExpired) {
+            handleSessionExpired();
         } else {
             showToast("Erreur: " + data.message);
         }
     } catch(err) {
+        console.error(err);
         showToast("Erreur lors de la demande.");
     }
     hideLoader();
@@ -269,32 +396,35 @@ async function bookSlot(day, slot, studio) {
 async function cancelSlot(week, day, slot, studio) {
     const targetWeek = week || state.selectedWeek;
     if (!confirm(`Êtes-vous sûr de vouloir annuler votre créneau du ${day} (${slot}) pour la ${targetWeek} ?`)) return;
-    
+
     showLoader();
     try {
         const payload = {
             action: 'cancelBooking',
+            token: state.token,
             week: targetWeek,
-            name: state.user.name,
             day: day,
             slot: slot,
             studio: studio
         };
-        
+
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
             headers: { 'Content-Type': 'text/plain' }
         });
-        
+
         const data = await response.json();
         if (data.success) {
             showToast("Réservation annulée.");
             fetchData();
+        } else if (data.sessionExpired) {
+            handleSessionExpired();
         } else {
             showToast("Erreur: " + data.message);
         }
     } catch(err) {
+        console.error(err);
         showToast("Erreur lors de l'annulation.");
     }
     hideLoader();
@@ -304,12 +434,12 @@ async function cancelSlot(week, day, slot, studio) {
 function renderDashboard() {
     ui.welcome.textContent = `Bonjour, ${state.user.name}`;
     containers.mySlots.innerHTML = '';
-    
+
     if (state.mySlots.length === 0) {
         containers.mySlots.innerHTML = '<div class="empty-state">Vous n\'avez aucun créneau réservé sur cette semaine.</div>';
         return;
     }
-    
+
     state.mySlots.forEach(slot => {
         const card = document.createElement('div');
         card.className = 'slot-card';
@@ -329,19 +459,19 @@ function renderDashboard() {
 
 function renderBooking() {
     containers.availableSlots.innerHTML = '';
-    
+
     if (state.availableSlots.length === 0) {
         containers.availableSlots.innerHTML = '<div class="empty-state">Aucun créneau disponible pour cette semaine.</div>';
         return;
     }
-    
+
     state.availableSlots.forEach(slot => {
         const card = document.createElement('div');
         card.className = 'slot-card';
-        
+
         const selectId = `select-${slot.day.replace(/[^a-zA-Z0-9]/g, '')}-${slot.time.replace(/[^a-zA-Z0-9]/g, '')}`;
         const studioOptions = slot.studios.map(s => `<option value="${s}">${s}</option>`).join('');
-        
+
         card.innerHTML = `
             <div class="slot-header">
                 <div>
@@ -355,7 +485,7 @@ function renderBooking() {
                     ${studioOptions}
                 </select>
             </div>
-            <button class="btn-primary" style="margin-top:0.25rem;" 
+            <button class="btn-primary" style="margin-top:0.25rem;"
                 onclick="bookSlot('${slot.day}', '${slot.time}', document.getElementById('${selectId}').value)">
                 Demander ce créneau
             </button>
@@ -372,13 +502,13 @@ function showSection(sectionName) {
             s.classList.add('hidden');
         }
     });
-    
+
     if (sections[sectionName]) {
         sections[sectionName].classList.add('active');
         sections[sectionName].classList.remove('hidden');
     }
-    
-    if (sectionName === 'login') {
+
+    if (sectionName === 'login' || sectionName === 'verify') {
         btns.logout.classList.add('hidden');
         weekNav.container.classList.add('hidden');
     } else {
