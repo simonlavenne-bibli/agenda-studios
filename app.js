@@ -148,8 +148,11 @@ async function handleRequestCode(e) {
         const data = await response.json();
 
         if (data.success) {
-            state.pendingName = name;
-            ui.verifyTargetName.textContent = name;
+            // Le serveur peut renvoyer un nom différent de celui tapé, si cet
+            // email était déjà enregistré sous un autre nom (voir Code.gs) —
+            // c'est CE nom qu'il faut utiliser pour l'étape suivante.
+            state.pendingName = data.name || name;
+            ui.verifyTargetName.textContent = state.pendingName;
             ui.verifyCodeInput.value = '';
             showSection('verify');
             startResendCooldown();
