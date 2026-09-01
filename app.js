@@ -73,7 +73,15 @@ const ui = {
 function init() {
     // Calculer la semaine ISO actuelle de manière exacte
     state.currentWeek = getISOWeekString(new Date());
-    state.selectedWeek = state.currentWeek;
+
+    // Si l'app est ouverte depuis un lien de confirmation par email
+    // (?week=2026-W41), on affiche directement cette semaine-là plutôt que
+    // "la" semaine en cours — sinon une réservation faite pour une autre
+    // semaine (passée ou future) semble ne jamais apparaître.
+    const urlParams = new URLSearchParams(window.location.search);
+    const linkedWeek = urlParams.get('week');
+    const isValidWeek = linkedWeek && /^\d{4}-W\d{2}$/.test(linkedWeek);
+    state.selectedWeek = isValidWeek ? linkedWeek : state.currentWeek;
 
     // Vérifier si un jeton de session valide est déjà stocké
     const savedToken = localStorage.getItem('agendaToken');
