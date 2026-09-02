@@ -12,7 +12,7 @@ const RESEND_COOLDOWN_SECONDS = 60;
 let state = {
     user: { name: '' },
     token: '',
-    pendingName: '',       // nom en attente de vérification (entre étape 1 et étape 2)
+    pendingEmail: '',      // email en attente de vérification (entre étape 1 et étape 2)
     currentWeek: '',       // Semaine réelle d'aujourd'hui (ex: "2026-W35")
     selectedWeek: '',      // Semaine affichée dans l'agenda
     mySlots: [],
@@ -62,8 +62,6 @@ const ui = {
     welcome: document.getElementById('welcome-message'),
     loader: document.getElementById('loader'),
     toast: document.getElementById('toast'),
-    emailFieldGroup: document.getElementById('email-field-group'),
-    userNameInput: document.getElementById('userName'),
     userEmailInput: document.getElementById('userEmail'),
     verifyCodeInput: document.getElementById('verifyCodeInput'),
     verifyTargetName: document.getElementById('verify-target-name')
@@ -133,13 +131,12 @@ function init() {
 
 async function handleRequestCode(e) {
     e.preventDefault();
-    const name = ui.userNameInput.value.trim();
     const email = ui.userEmailInput.value.trim();
-    if (!name) return;
+    if (!email) return;
 
     showLoader();
     try {
-        const payload = { action: 'requestCode', name, email };
+        const payload = { action: 'requestCode', email };
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
@@ -148,19 +145,12 @@ async function handleRequestCode(e) {
         const data = await response.json();
 
         if (data.success) {
-            // Le serveur peut renvoyer un nom différent de celui tapé, si cet
-            // email était déjà enregistré sous un autre nom (voir Code.gs) —
-            // c'est CE nom qu'il faut utiliser pour l'étape suivante.
-            state.pendingName = data.name || name;
-            ui.verifyTargetName.textContent = state.pendingName;
+            state.pendingEmail = email;
+            ui.verifyTargetName.textContent = data.name || email;
             ui.verifyCodeInput.value = '';
             showSection('verify');
             startResendCooldown();
             showToast(data.message || "Code envoyé.");
-        } else if (data.reason === 'EMAIL_REQUIRED') {
-            ui.emailFieldGroup.classList.remove('hidden');
-            ui.userEmailInput.setAttribute('required', 'required');
-            showToast(data.message || "Première connexion : merci d'indiquer votre email.");
         } else {
             showToast(data.message || "Erreur lors de l'envoi du code.");
         }
@@ -178,7 +168,7 @@ async function handleVerifyCode(e) {
 
     showLoader();
     try {
-        const payload = { action: 'verifyCode', name: state.pendingName, code };
+        const payload = { action: 'verifyCode', email: state.pendingEmail, code };
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
@@ -210,11 +200,7 @@ async function handleResendCode() {
 
     showLoader();
     try {
-        const payload = {
-            action: 'requestCode',
-            name: state.pendingName,
-            email: ui.userEmailInput.value.trim()
-        };
+        const payload = { action: 'requestCode', email: state.pendingEmail };
         const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify(payload),
@@ -248,10 +234,8 @@ function startResendCooldown() {
 }
 
 function resetToLoginStep() {
-    ui.emailFieldGroup.classList.add('hidden');
-    ui.userEmailInput.removeAttribute('required');
     ui.userEmailInput.value = '';
-    state.pendingName = '';
+    state.pendingEmail = '';
     showSection('login');
 }
 
