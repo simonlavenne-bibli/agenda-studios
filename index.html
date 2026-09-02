@@ -37,15 +37,11 @@
             <section id="login-section" class="active">
                 <div class="card">
                     <h2>Bienvenue</h2>
-                    <p class="subtitle">Entrez votre nom pour recevoir un code de connexion par email</p>
+                    <p class="subtitle">Entrez votre email pour recevoir un code de connexion</p>
                     <form id="login-form">
                         <div class="form-group">
-                            <label for="userName">Votre Nom (ex: Lerusse)</label>
-                            <input type="text" id="userName" required placeholder="Entrez votre nom" autocomplete="name">
-                        </div>
-                        <div class="form-group hidden" id="email-field-group">
-                            <label for="userEmail">Votre Email (première connexion)</label>
-                            <input type="email" id="userEmail" placeholder="Pour recevoir votre code" autocomplete="email">
+                            <label for="userEmail">Votre Email</label>
+                            <input type="email" id="userEmail" required placeholder="vous@exemple.be" autocomplete="email">
                         </div>
                         <button type="submit" class="btn-primary">Recevoir mon code</button>
                     </form>
@@ -57,7 +53,7 @@
                 <div class="card">
                     <h2>Vérification</h2>
                     <p class="subtitle">
-                        Un code à 6 chiffres a été envoyé par email à l'adresse associée à
+                        Un code à 6 chiffres a été envoyé à
                         <strong id="verify-target-name"></strong>.
                     </p>
                     <form id="verify-form">
@@ -69,7 +65,7 @@
                         <button type="submit" class="btn-primary">Valider</button>
                     </form>
                     <button type="button" id="resend-code-btn" class="btn-text" style="width:100%; margin-top:0.5rem;">Renvoyer le code</button>
-                    <button type="button" id="back-to-login-btn" class="btn-text" style="width:100%;">← Changer de nom</button>
+                    <button type="button" id="back-to-login-btn" class="btn-text" style="width:100%;">← Changer d'email</button>
                 </div>
             </section>
 
@@ -114,6 +110,6 @@
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="hidden">Message</div>
 
-    <script src="./app.js?v=5"></script>
+    <script src="./app.js?v=6"></script>
 </body>
 </html>
