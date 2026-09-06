@@ -74,7 +74,7 @@ const ui = {
 // ====== INITIALIZATION ======
 function init() {
     // Calculer la semaine ISO actuelle de manière exacte
-    state.currentWeek = getISOWeekString(new Date());
+    state.currentWeek = getISOWeekString(getEffectiveTodayForWeek());
 
     // Si l'app est ouverte depuis un lien de confirmation par email
     // (?week=2026-W41), on affiche directement cette semaine-là plutôt que
@@ -272,6 +272,18 @@ function getISOWeekString(d) {
     const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
     const year = new Date(firstThursday).getFullYear();
     return `${year}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+// "Aujourd'hui", sauf le week-end : samedi et dimanche renvoient le lundi
+// suivant. Les studios ne fonctionnant que du lundi au vendredi, "la semaine
+// en cours" un week-end n'a plus rien à proposer — on pointe directement sur
+// la semaine utile suivante, cohérent avec le même calcul côté serveur.
+function getEffectiveTodayForWeek() {
+    const now = new Date();
+    const day = now.getDay(); // 0 = dimanche, 6 = samedi
+    if (day === 0) { now.setDate(now.getDate() + 1); }
+    else if (day === 6) { now.setDate(now.getDate() + 2); }
+    return now;
 }
 
 function getMondayFromWeekString(weekStr) {
