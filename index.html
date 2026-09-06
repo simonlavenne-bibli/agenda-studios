@@ -79,6 +79,8 @@
                     <button id="new-booking-btn" class="btn-secondary">+ Réserver</button>
                 </div>
 
+                <button id="view-future-btn" class="btn-text" style="width:100%; text-align:left; padding-left:0;">📅 Voir mes réservations à venir (6 mois) →</button>
+
                 <h3 class="section-title">Mes Réservations sur cette semaine</h3>
                 <div id="my-slots-container">
                     <div class="empty-state">Chargement...</div>
@@ -99,6 +101,21 @@
                     <div class="empty-state">Chargement...</div>
                 </div>
             </section>
+
+            <!-- SECTION VUE AGRÉGÉE (6 PROCHAINS MOIS) -->
+            <section id="future-section" class="hidden">
+                <div class="dashboard-header">
+                    <div>
+                        <h2>Mes réservations à venir</h2>
+                        <p class="subtitle" style="margin-bottom:0;">Sur les 6 prochains mois</p>
+                    </div>
+                    <button id="back-from-future-btn" class="btn-text">← Retour</button>
+                </div>
+
+                <div id="future-slots-container">
+                    <div class="empty-state">Chargement...</div>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -110,6 +127,6 @@
     <!-- TOAST NOTIFICATION -->
     <div id="toast" class="hidden">Message</div>
 
-    <script src="./app.js?v=6"></script>
+    <script src="./app.js?v=7"></script>
 </body>
 </html>
