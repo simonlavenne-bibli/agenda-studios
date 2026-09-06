@@ -25,7 +25,8 @@ const sections = {
     login: document.getElementById('login-section'),
     verify: document.getElementById('verify-section'),
     dashboard: document.getElementById('dashboard-section'),
-    booking: document.getElementById('booking-section')
+    booking: document.getElementById('booking-section'),
+    future: document.getElementById('future-section')
 };
 
 const forms = {
@@ -41,7 +42,9 @@ const btns = {
     nextWeek: document.getElementById('next-week-btn'),
     todayBtn: document.getElementById('today-btn'),
     resendCode: document.getElementById('resend-code-btn'),
-    backToLogin: document.getElementById('back-to-login-btn')
+    backToLogin: document.getElementById('back-to-login-btn'),
+    viewFuture: document.getElementById('view-future-btn'),
+    backFromFuture: document.getElementById('back-from-future-btn')
 };
 
 const weekNav = {
@@ -55,7 +58,8 @@ const weekNav = {
 
 const containers = {
     mySlots: document.getElementById('my-slots-container'),
-    availableSlots: document.getElementById('available-slots-container')
+    availableSlots: document.getElementById('available-slots-container'),
+    futureSlots: document.getElementById('future-slots-container')
 };
 
 const ui = {
@@ -104,6 +108,8 @@ function init() {
     // Event Listeners — navigation
     btns.newBooking.addEventListener('click', () => showSection('booking'));
     btns.backToDash.addEventListener('click', () => showSection('dashboard'));
+    btns.viewFuture.addEventListener('click', () => { showSection('future'); fetchMySessions(); });
+    btns.backFromFuture.addEventListener('click', () => showSection('dashboard'));
 
     // Navigation semaines
     btns.prevWeek.addEventListener('click', () => shiftWeek(-1));
@@ -351,6 +357,28 @@ async function fetchData() {
     hideLoader();
 }
 
+async function fetchMySessions() {
+    showLoader();
+    containers.futureSlots.innerHTML = '<div class="empty-state">Chargement...</div>';
+    try {
+        const url = `${API_URL}?action=getMySessions&token=${encodeURIComponent(state.token)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.success) {
+            renderFutureSlots(data.sessions || []);
+        } else if (data.sessionExpired) {
+            handleSessionExpired();
+        } else {
+            showToast("Erreur lors de la récupération de vos réservations : " + (data.message || ''));
+        }
+    } catch (err) {
+        console.error(err);
+        showToast("Erreur de connexion avec Google.");
+    }
+    hideLoader();
+}
+
 async function bookSlot(day, slot, studio) {
     if (!confirm(`Demander la réservation pour ${day} (${slot}) en ${studio} ?`)) return;
 
@@ -412,7 +440,13 @@ async function cancelSlot(week, day, slot, studio) {
         const data = await response.json();
         if (data.success) {
             showToast("Réservation annulée.");
-            fetchData();
+            // Rafraîchir la vue actuellement affichée — la vue agrégée "6 mois"
+            // n'a pas la même source de données que le tableau de bord semaine par semaine.
+            if (sections.future && sections.future.classList.contains('active')) {
+                fetchMySessions();
+            } else {
+                fetchData();
+            }
         } else if (data.sessionExpired) {
             handleSessionExpired();
         } else {
@@ -450,6 +484,48 @@ function renderDashboard() {
         `;
         containers.mySlots.appendChild(card);
     });
+}
+
+// La liste arrive déjà triée chronologiquement (semaine par semaine, dans
+// l'ordre où les lignes apparaissent dans chaque feuille) — pas besoin de
+// re-trier côté client.
+function renderFutureSlots(sessions) {
+    containers.futureSlots.innerHTML = '';
+
+    if (sessions.length === 0) {
+        containers.futureSlots.innerHTML = '<div class="empty-state">Aucune réservation à venir sur les prochains mois.</div>';
+        return;
+    }
+
+    let lastWeek = null;
+    sessions.forEach(slot => {
+        if (slot.week !== lastWeek) {
+            const heading = document.createElement('div');
+            heading.className = 'future-week-heading';
+            heading.textContent = weekLabelFromId(slot.week);
+            containers.futureSlots.appendChild(heading);
+            lastWeek = slot.week;
+        }
+
+        const card = document.createElement('div');
+        card.className = 'slot-card';
+        card.innerHTML = `
+            <div class="slot-header">
+                <div>
+                    <div class="slot-day">${slot.day}</div>
+                    <div class="slot-time">${slot.time}</div>
+                </div>
+                <div class="slot-studio">${slot.studio}</div>
+            </div>
+            <button class="btn-danger" onclick="cancelSlot('${slot.week}', '${slot.day}', '${slot.time}', '${slot.studio}')">Annuler ce créneau</button>
+        `;
+        containers.futureSlots.appendChild(card);
+    });
+}
+
+function weekLabelFromId(weekId) {
+    const parts = weekId.split('-W');
+    return `Semaine ${parseInt(parts[1], 10)} (${parts[0]})`;
 }
 
 function renderBooking() {
@@ -505,9 +581,13 @@ function showSection(sectionName) {
 
     if (sectionName === 'login' || sectionName === 'verify') {
         btns.logout.classList.add('hidden');
-        weekNav.container.classList.add('hidden');
     } else {
         btns.logout.classList.remove('hidden');
+    }
+
+    if (sectionName === 'login' || sectionName === 'verify' || sectionName === 'future') {
+        weekNav.container.classList.add('hidden');
+    } else {
         weekNav.container.classList.remove('hidden');
     }
 }
