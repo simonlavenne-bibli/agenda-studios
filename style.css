@@ -205,6 +205,20 @@ section.active {
     margin: 1.25rem 0 0.75rem 0;
 }
 
+.future-week-heading {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 1.5rem 0 0.5rem 0;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--border);
+}
+.future-week-heading:first-child {
+    margin-top: 0.5rem;
+}
+
 .form-group {
     margin-bottom: 1.25rem;
 }
