@@ -1,5 +1,5 @@
 // ====== CONFIGURATION ======
-const API_URL = "https://script.google.com/macros/s/AKfycbyVke7L-k43hs09d8XTiuF_OVL-roPW4zDLLhZRtYbn9IZkQuIx2C2BLYdbr2VuTl0/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyJT_NBboGYXgyUuv0HBKha6-pujGtadd3RvP5jvfsjNs1xH6UZO-6oXxsgUmox1FMC/exec";
 
 const MONTHS_FR = [
     'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
