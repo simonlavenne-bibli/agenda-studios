@@ -13,6 +13,7 @@ const WEEK_CACHE_PREFIX = 'agendaWeek_';
 const WEEK_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // au-delà de 12 h, on n'affiche plus l'ancien cache
 const PREFETCH_MAX_AGE_MS = 60 * 1000;              // pas de préchargement si la semaine a moins d'1 min
 const MAX_WEEKS_AHEAD = 25;                          // on ne précharge pas au-delà (évite de créer des onglets inutiles)
+const FUTURE_CACHE_KEY = 'agendaFuture';
 let fetchCounter = 0;                                // identifie la dernière requête (évite les réponses périmées)
 
 // ====== STATE ======
@@ -377,6 +378,7 @@ function clearWeekCache(week) {
         Object.keys(localStorage)
             .filter(k => k.indexOf(WEEK_CACHE_PREFIX) === 0)
             .forEach(k => localStorage.removeItem(k));
+        localStorage.removeItem(FUTURE_CACHE_KEY);
     } catch (e) { /* ignore */ }
 }
 
@@ -458,24 +460,41 @@ async function prefetchNeighbourWeeks(week) {
     }
 }
 
-async function fetchMySessions() {
-    showLoader();
-    containers.futureSlots.innerHTML = '<div class="empty-state">Chargement...</div>';
+// Vue « 6 mois » : affiche tout de suite la dernière liste connue, puis la met à jour.
+async function fetchMySessions(options) {
+    const fresh = !!(options && options.fresh);
+    let cached = null;
+    if (!fresh) {
+        try {
+            const raw = localStorage.getItem(FUTURE_CACHE_KEY);
+            const c = raw ? JSON.parse(raw) : null;
+            if (c && c.ts && (Date.now() - c.ts) <= WEEK_CACHE_MAX_AGE_MS) cached = c;
+        } catch (e) { /* ignore */ }
+    }
+
+    if (cached) {
+        renderFutureSlots(cached.sessions || []);
+    } else {
+        showLoader();
+        containers.futureSlots.innerHTML = '<div class="empty-state">Chargement...</div>';
+    }
+
     try {
         const url = `${API_URL}?action=getMySessions&token=${encodeURIComponent(state.token)}`;
         const response = await fetch(url);
         const data = await response.json();
 
         if (data.success) {
+            try { localStorage.setItem(FUTURE_CACHE_KEY, JSON.stringify({ ts: Date.now(), sessions: data.sessions || [] })); } catch (e) { /* ignore */ }
             renderFutureSlots(data.sessions || []);
         } else if (data.sessionExpired) {
             handleSessionExpired();
-        } else {
+        } else if (!cached) {
             showToast("Erreur lors de la récupération de vos réservations : " + (data.message || ''));
         }
     } catch (err) {
         console.error(err);
-        showToast("Erreur de connexion avec Google.");
+        showToast(cached ? "Hors connexion : liste de votre dernière visite." : "Erreur de connexion avec Google.");
     }
     hideLoader();
 }
@@ -545,8 +564,9 @@ async function cancelSlot(week, day, slot, studio) {
             // Rafraîchir la vue actuellement affichée — la vue agrégée "6 mois"
             // n'a pas la même source de données que le tableau de bord semaine par semaine.
             clearWeekCache(targetWeek);
+            try { localStorage.removeItem(FUTURE_CACHE_KEY); } catch (e) { /* ignore */ }
             if (sections.future && sections.future.classList.contains('active')) {
-                fetchMySessions();
+                fetchMySessions({ fresh: true });
             } else {
                 fetchData({ fresh: true });
             }
@@ -702,6 +722,13 @@ function showToast(message) {
     ui.toast.textContent = message;
     ui.toast.classList.remove('hidden');
     setTimeout(() => ui.toast.classList.add('hidden'), 3500);
+}
+
+// Service worker : garde les fichiers de l'appli en cache (démarrage plus rapide, fonctionne même réseau lent)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker non enregistré :', err));
+    });
 }
 
 // Démarrage de l'application
