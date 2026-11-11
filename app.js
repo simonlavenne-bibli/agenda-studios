@@ -8,6 +8,13 @@ const MONTHS_FR = [
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
+// Cache local des semaines (affichage immédiat des dernières données connues).
+const WEEK_CACHE_PREFIX = 'agendaWeek_';
+const WEEK_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // au-delà de 12 h, on n'affiche plus l'ancien cache
+const PREFETCH_MAX_AGE_MS = 60 * 1000;              // pas de préchargement si la semaine a moins d'1 min
+const MAX_WEEKS_AHEAD = 25;                          // on ne précharge pas au-delà (évite de créer des onglets inutiles)
+let fetchCounter = 0;                                // identifie la dernière requête (évite les réponses périmées)
+
 // ====== STATE ======
 let state = {
     user: { name: '' },
@@ -248,6 +255,7 @@ function resetToLoginStep() {
 function handleLogout() {
     localStorage.removeItem('agendaToken');
     localStorage.removeItem('agendaName');
+    clearWeekCache();
     state.token = '';
     state.user = { name: '' };
     resetToLoginStep();
@@ -345,28 +353,109 @@ function renderWeekNavigator() {
 
 // ====== ACTIONS (authentifiées par jeton de session) ======
 
-async function fetchData() {
-    showLoader();
+// ---- Cache local des semaines ----
+
+function readWeekCache(week) {
     try {
-        const url = `${API_URL}?action=getData&token=${encodeURIComponent(state.token)}&week=${encodeURIComponent(state.selectedWeek)}`;
+        const raw = localStorage.getItem(WEEK_CACHE_PREFIX + week);
+        if (!raw) return null;
+        const c = JSON.parse(raw);
+        if (!c || !c.ts || (Date.now() - c.ts) > WEEK_CACHE_MAX_AGE_MS) return null;
+        return c;
+    } catch (e) { return null; }
+}
+
+function writeWeekCache(week, mySlots, availableSlots) {
+    try {
+        localStorage.setItem(WEEK_CACHE_PREFIX + week, JSON.stringify({ ts: Date.now(), mySlots, availableSlots }));
+    } catch (e) { /* stockage plein ou indisponible : sans importance */ }
+}
+
+function clearWeekCache(week) {
+    try {
+        if (week) { localStorage.removeItem(WEEK_CACHE_PREFIX + week); return; }
+        Object.keys(localStorage)
+            .filter(k => k.indexOf(WEEK_CACHE_PREFIX) === 0)
+            .forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* ignore */ }
+}
+
+function shiftWeekId(weekStr, offset) {
+    const monday = getMondayFromWeekString(weekStr);
+    monday.setDate(monday.getDate() + offset * 7);
+    return getISOWeekString(monday);
+}
+
+// Charge la semaine affichée.
+// - Si une copie récente existe : affichage immédiat, puis mise à jour discrète en arrière-plan.
+// - Sinon (ou si fresh === true, par ex. après une réservation) : écran de chargement classique.
+async function fetchData(options) {
+    const fresh = !!(options && options.fresh);
+    const week = state.selectedWeek;
+    const myFetch = ++fetchCounter;
+
+    const cached = fresh ? null : readWeekCache(week);
+    if (cached) {
+        state.mySlots = cached.mySlots || [];
+        state.availableSlots = cached.availableSlots || [];
+        renderDashboard();
+        renderBooking();
+    } else {
+        showLoader();
+    }
+
+    try {
+        const url = `${API_URL}?action=getData&token=${encodeURIComponent(state.token)}&week=${encodeURIComponent(week)}`;
         const response = await fetch(url);
         const data = await response.json();
+
+        // Une requête plus récente a été lancée entre-temps (changement de semaine) : on ignore cette réponse
+        if (myFetch !== fetchCounter) { if (!cached) hideLoader(); return; }
 
         if (data.success) {
             state.mySlots = data.mySlots || [];
             state.availableSlots = data.availableSlots || [];
+            writeWeekCache(week, state.mySlots, state.availableSlots);
             renderDashboard();
             renderBooking();
+            prefetchNeighbourWeeks(week);
         } else if (data.sessionExpired) {
             handleSessionExpired();
-        } else {
+        } else if (!cached) {
             showToast("Erreur lors de la récupération des données : " + (data.message || ''));
         }
     } catch (err) {
         console.error(err);
-        showToast("Erreur de connexion avec Google.");
+        if (myFetch === fetchCounter) {
+            showToast(cached ? "Hors connexion : données de votre dernière visite." : "Erreur de connexion avec Google.");
+        }
     }
-    hideLoader();
+    if (myFetch === fetchCounter) hideLoader();
+}
+
+// Précharge discrètement la semaine suivante (et la précédente si elle n'est pas passée),
+// pour que le changement de semaine soit instantané.
+async function prefetchNeighbourWeeks(week) {
+    const candidates = [shiftWeekId(week, 1)];
+    const prev = shiftWeekId(week, -1);
+    if (prev >= state.currentWeek) candidates.push(prev);
+
+    const limit = shiftWeekId(state.currentWeek, MAX_WEEKS_AHEAD);
+
+    for (const w of candidates) {
+        if (w > limit) continue;
+        const existing = readWeekCache(w);
+        if (existing && (Date.now() - existing.ts) < PREFETCH_MAX_AGE_MS) continue;
+        // On s'arrête si l'utilisateur a changé de semaine ou de session entre-temps
+        if (state.selectedWeek !== week || !state.token) return;
+        try {
+            const url = `${API_URL}?action=getData&token=${encodeURIComponent(state.token)}&week=${encodeURIComponent(w)}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.success && state.token) writeWeekCache(w, data.mySlots || [], data.availableSlots || []);
+            else return; // erreur ou session expirée : on n'insiste pas
+        } catch (e) { return; }
+    }
 }
 
 async function fetchMySessions() {
@@ -415,7 +504,8 @@ async function bookSlot(day, slot, studio) {
         if (data.success) {
             showToast("Demande envoyée pour validation !");
             showSection('dashboard');
-            fetchData();
+            clearWeekCache(state.selectedWeek);
+            fetchData({ fresh: true });
         } else if (data.sessionExpired) {
             handleSessionExpired();
         } else {
@@ -454,10 +544,11 @@ async function cancelSlot(week, day, slot, studio) {
             showToast("Réservation annulée.");
             // Rafraîchir la vue actuellement affichée — la vue agrégée "6 mois"
             // n'a pas la même source de données que le tableau de bord semaine par semaine.
+            clearWeekCache(targetWeek);
             if (sections.future && sections.future.classList.contains('active')) {
                 fetchMySessions();
             } else {
-                fetchData();
+                fetchData({ fresh: true });
             }
         } else if (data.sessionExpired) {
             handleSessionExpired();
